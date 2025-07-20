@@ -1,12 +1,13 @@
 ---
 layout: post
 title: THM - Alfred
+author: _f0rmat
 date: 2025-07-20
-Category: TryHackMe Offensive-Security CTF
-Difficulty: Medium
 tags: nmap msfvenom jenkins groovy metasploit incognito impersonation
+category: CTF
 ---
 
+Difficulty: Medium
 Status: Complete
 IP: 10.10.16.110
 
