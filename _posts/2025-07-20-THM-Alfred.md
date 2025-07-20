@@ -95,7 +95,7 @@ Initally browsing to the port 80 page we are presented with:
 
 [![1](/assets/blog/THM/Alfred/1.png)](/assets/blog/THM/Alfred/1.png)
 
-Checking the sourse of the page we find litte:
+Checking the source of the page we find litte:
 
 ```shell
 <html>
