@@ -7,9 +7,9 @@ tags: nmap msfvenom jenkins groovy metasploit incognito impersonation
 category: CTF
 ---
 
-Difficulty: Medium
-Status: Complete
-IP: 10.10.16.110
+Difficulty: Medium </br>
+Status: Complete </br>
+IP: 10.10.16.110 </br>
 
 # Resolution summary
 - Initial access to backend Jenkins system due to default credentials
