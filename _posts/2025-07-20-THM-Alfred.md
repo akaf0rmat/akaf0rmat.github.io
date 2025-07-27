@@ -3,7 +3,7 @@ layout: post
 title: THM - Alfred
 author: _f0rmat
 date: 2025-07-20
-tags: nmap msfvenom jenkins groovy metasploit incognito impersonation
+tags: TryHackMe nmap msfvenom jenkins groovy metasploit incognito impersonation
 category: CTF
 ---
 
