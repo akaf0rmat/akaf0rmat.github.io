@@ -1,6 +1,6 @@
 ---
 layout: post
-title: HTB - SP - Meow
+title: HTB - Starting Point - Meow
 author: _f0rmat
 date: 2025-08-12
 tags: StartingPoint HackTheBox Tier0 Telnet
